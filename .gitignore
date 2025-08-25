@@ -1,0 +1,7 @@
+/results
+/models
+/envs
+/local-data
+/hf_cache
+
+__pycache__
