@@ -3,5 +3,6 @@
 /envs
 /local-data
 /hf_cache
+/logs
 
 __pycache__
