@@ -4,31 +4,21 @@ import os
 # os.environ["HF_HOME"] = "/data8/zhangxin/aoeb/hf_cache"
 os.environ["HF_HUB_ENDPOINT"] = "https://hf-mirror.com"
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-os.environ["LOCAL_DATA_PREFIX"] = os.environ.get("LOCAL_DATA_PREFIX", "/data/workspace/aoeb/local-data")
+# os.environ["LOCAL_DATA_PREFIX"] = os.environ.get("LOCAL_DATA_PREFIX", "/data/workspace/aoeb/local-data")
 
 import mteb
-from mteb.tasks.Retrieval import ArguAna
 from sentence_transformers import SentenceTransformer
-from aoeb.tasks.BrowseCompPlus import BrowseCompPlus
-from aoeb.tasks.ToolRet import ToolRet
-from aoeb.tasks.LongMemEval import LongMemEval
-from aoeb.tasks.LoCoMo import LoCoMo
 
-def get_local_task_instance(local_task_dict, task_name, **kwargs):
-    # 下划线改为 -
-    # 全部字母小写
-    task_name = task_name.lower().replace("_", "-")
-    task_cls = local_task_dict.get(task_name)
-    if task_cls is None:
-        raise ValueError(f"Task {task_name} not defined.")
-    return task_cls(**kwargs)
+import aoeb
+
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Run MTEB-style benchmark on multiple tasks for a single model.")
     parser.add_argument("--model_path", type=str, default="/data/workspace/models/Qwen/Qwen3-Embedding-0.6B")
-    parser.add_argument("--tasks", type=str, default="toolret")
+    parser.add_argument("--tasks", type=str, default="ToolRet")
     parser.add_argument("--output_folder", type=str, default="results/")
     return parser
+
 
 def main():
     # 指定 model
@@ -37,35 +27,18 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
 
-    model = SentenceTransformer(args.model_path)
+    # model = SentenceTransformer(args.model_path)
     tasks = args.tasks.split(",")
     print(f"Running tasks: {tasks}")
     output_folder = os.path.join(args.output_folder, args.model_path.split("/")[-1])
 
     # tasks: list[AbsTask] or list[str] 对应本地任务类和 mteb 已支持的任务类
-    # 本地任务模式
-    local_tasks_dict = {
-        "browsecomp-plus": BrowseCompPlus,
-        "toolret": ToolRet,
-        "longmemeval": LongMemEval,
-        "locomo": LoCoMo,
-    }
-    tasks = [get_local_task_instance(local_tasks_dict, task) for task in tasks]
+    tasks = mteb.get_tasks(tasks=tasks)
     evaluation = mteb.MTEB(tasks=tasks)
-    # evaluation = mteb.MTEB(tasks=[BrowseCompPlus(), ToolRet(), LongMemEval()])
     results = evaluation.run(model, output_folder=output_folder)
-    print(results) 
+    print(results)
+    return
 
-    # # mteb 模式
-    # tasks = mteb.get_tasks(
-    #     tasks = [
-    #         "AppsRetrieval",
-    #         "CosQA",
-    #     ]
-    # )
-    # evaluation_mteb = mteb.MTEB(tasks=tasks)
-    # results = evaluation_mteb.run(model, output_folder=output_folder)
-    # print(results)
 
 if __name__ == "__main__":
     main()
