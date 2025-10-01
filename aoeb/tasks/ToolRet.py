@@ -35,7 +35,6 @@ booktitle={...},
 year={2024}
 }""",
         dataset={
-            "prefix": "local-data",
             "path": "vec-ai/mangopy_toolret",   # 根目录，下面有 web/code/customized
             "revision": "1.0",
             # 文件字段名声明

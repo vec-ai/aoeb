@@ -9,6 +9,8 @@ from mteb.abstasks.MultilingualTask import MultilingualTask
 
 from datasets import load_dataset
 
+PREFIX = os.environ.get("LOCAL_DATA_PREFIX", "local-data")
+
 
 class LocalRetrieval(AbsTaskRetrieval, MultilingualTask):
     """
@@ -79,7 +81,7 @@ year={2024}
             self.relevant_docs[hf_subset] = {}
 
             for split in eval_splits:
-                data_folder = os.path.join(self.metadata.dataset["prefix"], self.metadata.dataset["path"], hf_subset)
+                data_folder = os.path.join(PREFIX, self.metadata.dataset["path"], hf_subset)
 
                 queries_path = os.path.join(data_folder, self.metadata.dataset["query_file_name"])
                 corpus_path = os.path.join(data_folder, self.metadata.dataset["corpus_file_name"])

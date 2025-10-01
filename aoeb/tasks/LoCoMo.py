@@ -39,7 +39,6 @@ booktitle={...},
 year={2024}
 }""",
         dataset={
-            "prefix": "local-data",
             "path": "vec-ai/locomo",   
             "revision": "1.0",
             # 文件字段名声明

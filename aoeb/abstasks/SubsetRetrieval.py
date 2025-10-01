@@ -14,6 +14,9 @@ from mteb.abstasks.TaskMetadata import HFSubset
 from mteb.evaluation.evaluators import RetrievalEvaluator
 from mteb.load_results.task_results import ScoresDict
 
+PREFIX = os.environ.get("LOCAL_DATA_PREFIX", "local-data")
+
+
 class SubsetRetrieval(LocalRetrieval):
     metadata = TaskMetadata(
         name="UselessTaskName",
@@ -129,13 +132,13 @@ year={2024}
         # ""
         qid_docids_map = {}
         if self.metadata_dict["dataset"]["origin_data_file"].endswith(".jsonl"):
-            origin_data_file = os.path.join(self.metadata_dict["dataset"]["prefix"], self.metadata_dict["dataset"]["path"], hf_subset, self.metadata_dict["dataset"]["origin_data_file"])
+            origin_data_file = os.path.join(PREFIX, self.metadata_dict["dataset"]["path"], hf_subset, self.metadata_dict["dataset"]["origin_data_file"])
             with open(origin_data_file, "r", encoding="utf-8") as f:
                 for line in f:
                     data_point = json.loads(line)
                     qid_docids_map[data_point["query_id"]] = data_point["candidate_doc_ids"]
         else:
-            origin_data_file = os.path.join(self.metadata_dict["dataset"]["prefix"], self.metadata_dict["dataset"]["path"], self.metadata_dict["dataset"]["origin_data_file"])
+            origin_data_file = os.path.join(PREFIX, self.metadata_dict["dataset"]["path"], self.metadata_dict["dataset"]["origin_data_file"])
             with open(origin_data_file, "r", encoding="utf-8") as f:
                 origin_data = json.load(f)
                 for data_point in origin_data:

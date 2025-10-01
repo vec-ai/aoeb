@@ -4,6 +4,7 @@ import os
 # os.environ["HF_HOME"] = "/data8/zhangxin/aoeb/hf_cache"
 os.environ["HF_HUB_ENDPOINT"] = "https://hf-mirror.com"
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+os.environ["LOCAL_DATA_PREFIX"] = os.environ.get("LOCAL_DATA_PREFIX", "/data/workspace/aoeb/local-data")
 
 import mteb
 from mteb.tasks.Retrieval import ArguAna
@@ -24,9 +25,9 @@ def get_local_task_instance(local_task_dict, task_name, **kwargs):
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Run MTEB-style benchmark on multiple tasks for a single model.")
-    parser.add_argument("--model_path", type=str, default="./models/origin-lychee-rerank")
-    parser.add_argument("--tasks", type=str, default="")
-    parser.add_argument("--output_folder", required=True, type=str)
+    parser.add_argument("--model_path", type=str, default="/data/workspace/models/Qwen/Qwen3-Embedding-0.6B")
+    parser.add_argument("--tasks", type=str, default="toolret")
+    parser.add_argument("--output_folder", type=str, default="results/")
     return parser
 
 def main():
