@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # 检查是否提供了所需的参数
-if [ "$#" -lt 3 ]; then
-    echo "用法: $0 <model_path> <tasks> <output_folder> [gpu_id]"
-    echo "示例: $0 /data8/xjx/pretrained_models/e5-small-v2 \"longmemeval,locomo\" results_e5 0"
+if [ "$#" -lt 4 ]; then
+    echo "用法: $0 <model_path> <tasks> <output_folder> <batch_size>[gpu_id]"
+    echo "示例: $0 /data8/xjx/pretrained_models/e5-small-v2 \"longmemeval,locomo\" results_e5 32 0"
     exit 1
 fi
 
@@ -11,7 +11,8 @@ fi
 MODEL_PATH=$1
 TASKS=$2
 OUTPUT_FOLDER=$3
-GPU_ID=${4:-0}  # 默认使用GPU 0，如果提供了第四个参数则使用它
+BATCH_SIZE=$4
+GPU_ID=${5:-0}  # 默认使用GPU 0，如果提供了第 5 个参数则使用它
 
 # 设置CUDA可见设备
 export CUDA_VISIBLE_DEVICES=$GPU_ID
@@ -26,4 +27,5 @@ echo "使用GPU: $GPU_ID"
 python3 run.py \
     --model_path "$MODEL_PATH" \
     --tasks "$TASKS" \
-    --output_folder "$OUTPUT_FOLDER"
+    --output_folder "$OUTPUT_FOLDER" \
+    --batch_size "$BATCH_SIZE"

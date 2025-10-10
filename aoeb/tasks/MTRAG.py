@@ -1,12 +1,11 @@
 # ToolRetV4.py
-from aoeb.abstasks.SubsetRetrieval import SubsetRetrieval
+from aoeb.abstasks.LocalRetrieval import LocalRetrieval
 from mteb.abstasks.TaskMetadata import TaskMetadata
 
 
-class LongMemEval(SubsetRetrieval):
+class MTRAG(LocalRetrieval):
     metadata = TaskMetadata(
-
-        name="LongMemEval", # 实际采用的设置是 "LongMemEval_m_single_session_user",
+        name="MTRAG",
         description=(
             "Instruction retrieval benchmark: queries include an instruction + query, "
             "corpus contains tool documentation passages."
@@ -17,8 +16,14 @@ class LongMemEval(SubsetRetrieval):
         modalities=["text"],
         eval_splits=["test"],
         eval_langs={
-            # 暂时必须得有一个“子集”
-            "m_user_side_utterance": ["eng-Latn"]
+            "clapnq/lastturn": ["eng-Latn"],
+            "clapnq/rewrite": ["eng-Latn"],
+            "cloud/lastturn": ["eng-Latn"],
+            "cloud/rewrite": ["eng-Latn"],
+            "fiqa/lastturn": ["eng-Latn"],
+            "fiqa/rewrite": ["eng-Latn"],
+            "govt/lastturn": ["eng-Latn"],
+            "govt/rewrite": ["eng-Latn"],
         },
         main_score="ndcg_at_10",
         date=("2024-01-01", "2024-12-31"),
@@ -35,7 +40,7 @@ booktitle={...},
 year={2024}
 }""",
         dataset={
-            "path": "vec-ai/longmemeval",   
+            "path": "vec-ai/mt-rag-benchmark",
             "revision": "1.0",
             # 文件字段名声明
             "query_file_name": "queries.jsonl",
@@ -45,10 +50,8 @@ year={2024}
             "corpus_id_field": "id",
             "corpus_title_field": "title",
             "corpus_text_field": "text",
-            "qrels_dir": "qrels",
+            "qrels_dir": "",
             "qrels_file_name": "qrels.tsv",
-            "origin_data_file": "longmemeval_m"
-        },
+            
+        },        
     )
-
-    k_values= [5, 10]

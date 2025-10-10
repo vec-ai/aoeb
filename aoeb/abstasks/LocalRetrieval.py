@@ -99,8 +99,13 @@ year={2024}
                     queries_ds = queries_ds.remove_columns("_id")
 
                 queries = {q[self.metadata.dataset["query_id_field"]]: q[self.metadata.dataset["query_text_field"]] for q in queries_ds}
-                corpus = {d[self.metadata.dataset["corpus_id_field"]]: d.get(self.metadata.dataset["corpus_title_field"], "") + " " + d.get(self.metadata.dataset["corpus_text_field"], "") for d in corpus_ds}
-                
+                # corpus = {d[self.metadata.dataset["corpus_id_field"]]: d.get(self.metadata.dataset["corpus_title_field"], "") + " " + d.get(self.metadata.dataset["corpus_text_field"], "") for d in corpus_ds}
+                corpus = {
+                    d[self.metadata.dataset["corpus_id_field"]]: 
+                    (d.get(self.metadata.dataset["corpus_title_field"]) or "") + " " + 
+                    (d.get(self.metadata.dataset["corpus_text_field"]) or "") 
+                    for d in corpus_ds
+                }
                 qrels_ds = self.load_qrels_from_tsv(qrels_path)
 
 

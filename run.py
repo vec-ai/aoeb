@@ -1,5 +1,6 @@
 import argparse
 import os
+import torch
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # os.environ["HF_HOME"] = "/data8/zhangxin/aoeb/hf_cache"
 os.environ["HF_HUB_ENDPOINT"] = "https://hf-mirror.com"
@@ -17,6 +18,7 @@ def get_parser():
     parser.add_argument("--model_path", type=str, default="/data/workspace/models/Qwen/Qwen3-Embedding-0.6B")
     parser.add_argument("--tasks", type=str, default="ToolRet")
     parser.add_argument("--output_folder", type=str, default="results/")
+    parser.add_argument("--batch_size", type=int, default=32)
     return parser
 
 
@@ -27,15 +29,28 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
 
-    # model = SentenceTransformer(args.model_path)
+    model = SentenceTransformer(args.model_path, model_kwargs={"torch_dtype": torch.float16})
+    model.max_seq_length = min(8*1024, model.max_seq_length)
     tasks = args.tasks.split(",")
     print(f"Running tasks: {tasks}")
-    output_folder = os.path.join(args.output_folder, args.model_path.split("/")[-1])
+    output_folder = os.path.join(args.output_folder, args.model_path.split("/")[-1], "20251009")
 
+    # 验证任务是否已注册
+    print(f"Available custom tasks: {list(aoeb.LOCAL_REGISTRY.keys())}")
+    
     # tasks: list[AbsTask] or list[str] 对应本地任务类和 mteb 已支持的任务类
     tasks = mteb.get_tasks(tasks=tasks)
     evaluation = mteb.MTEB(tasks=tasks)
-    results = evaluation.run(model, output_folder=output_folder)
+    encode_kwargs = {
+        "batch_size": args.batch_size,
+        "show_progress_bar": True,
+        "normalize_embeddings": True,
+    }
+    results = evaluation.run(
+        model, 
+        output_folder=output_folder, 
+        encode_kwargs=encode_kwargs,
+    )
     print(results)
     return
 
