@@ -2,12 +2,17 @@ import logging
 import math
 import queue
 from contextlib import nullcontext
+from torch.utils.data import DataLoader
+
 
 from tqdm.autonotebook import tqdm
 import numpy as np
 import torch
-from mteb.encoder_interface import PromptType
-from mteb.models.sentence_transformer_wrapper import SentenceTransformerWrapper
+# from mteb.encoder_interface import PromptType
+from mteb.types import PromptType, Array, BatchedInput
+from mteb.abstasks.task_metadata import TaskMetadata
+# from mteb.models.sentence_transformer_wrapper import SentenceTransformerWrapper
+from mteb.models.sentence_transformer_wrapper import SentenceTransformerEncoderWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -69,21 +74,26 @@ from collections.abc import Sequence
 from typing import Any
 
 
-class STWrapper(SentenceTransformerWrapper):
+# class STWrapper(SentenceTransformerWrapper):
+class STWrapper(SentenceTransformerEncoderWrapper):
     def encode(
         self,
-        sentences: Sequence[str],
+        inputs: DataLoader[BatchedInput],  # 新版本：使用 DataLoader
         *,
-        task_name: str,
+        task_metadata: TaskMetadata,       # 新版本：使用 task_metadata 而非 task_name
+        hf_split: str,                     # 新增参数
+        hf_subset: str,                    # 新增参数
         prompt_type: PromptType | None = None,
         **kwargs: Any,
-    ) -> np.ndarray:
+    ) -> Array:
         """Encodes the given sentences using the encoder.
 
         Args:
-            sentences: The sentences to encode.
-            task_name: The name of the task. Sentence-transformers uses this to
+            inputs: DataLoader containing batched inputs to encode.
+            task_metadata: The metadata of the task. Sentence-transformers uses this to
                 determine which prompt to use from a specified dictionary.
+            hf_split: Split of current task (e.g., 'train', 'test')
+            hf_subset: Subset of current task
             prompt_type: The name type of prompt. (query or passage)
             **kwargs: Additional arguments to pass to the encoder.
 
@@ -94,42 +104,114 @@ class STWrapper(SentenceTransformerWrapper):
                 4. Specific task type prompt
                 5. Specific prompt type (query or passage)
 
-
         Returns:
-            The encoded sentences.
+            The encoded sentences as numpy array.
         """
+        # 从 DataLoader 中提取文本
+        sentences = [text for batch in inputs for text in batch["text"]]
+        
         prompt = None
         prompt_name = None
         if self.model_prompts is not None:
-            prompt_name = self.get_prompt_name(
-                self.model_prompts, task_name, prompt_type
-            )
+            prompt_name = self.get_prompt_name(task_metadata, prompt_type)
             prompt = self.model_prompts.get(prompt_name, None)
+        
         if prompt_name:
             logger.info(
-                f"Using {prompt_name=} for task={task_name} {prompt_type=} with {prompt=}"
+                f"Using {prompt_name=} for task={task_metadata.name} {prompt_type=} with {prompt=}"
             )
         else:
-            logger.info(f"No model prompts found for task={task_name} {prompt_type=}")
+            logger.info(f"No model prompts found for task={task_metadata.name} {prompt_type=}")
+        
         logger.info(f"Encoding {len(sentences)} sentences.")
 
-        kwargs.update(convert_to_tensor=True)
-
+        # 移除可能冲突的参数
+        kwargs.pop('convert_to_tensor', None)
+        
         mp_pool = getattr(self, 'mp_pool', None)
         if mp_pool is None:
             with torch.autocast(
                 device_type=self.device.type, dtype=AMP_DTYPE
             ) if AMP_DTYPE is not None else nullcontext():
-                embeddings = self.model.encode(sentences, prompt=prompt, **kwargs).cpu().float()
+                embeddings = self.model.encode(
+                    sentences, 
+                    prompt=prompt, 
+                    convert_to_tensor=True,
+                    **kwargs
+                )
+                if isinstance(embeddings, torch.Tensor):
+                    embeddings = embeddings.cpu().detach().float().numpy()
         else:
-            # kwargs.pop('output_value', 0)
-            # kwargs.pop('device', 0)
-            embeddings = _encode_multi_process(mp_pool, sentences, **kwargs).float()
+            embeddings = _encode_multi_process(
+                mp_pool, 
+                sentences, 
+                prompt=prompt,
+                **kwargs
+            )
+            if isinstance(embeddings, torch.Tensor):
+                embeddings = embeddings.cpu().detach().float().numpy()
 
-        if isinstance(embeddings, torch.Tensor):
-            # sometimes in kwargs can be return_tensors=True
-            embeddings = embeddings.cpu().detach().float().numpy()
         return embeddings
+    # def encode(
+    #     self,
+    #     sentences: Sequence[str],
+    #     *,
+    #     task_name: str,
+    #     prompt_type: PromptType | None = None,
+    #     **kwargs: Any,
+    # ) -> np.ndarray:
+    #     """Encodes the given sentences using the encoder.
+
+    #     Args:
+    #         sentences: The sentences to encode.
+    #         task_name: The name of the task. Sentence-transformers uses this to
+    #             determine which prompt to use from a specified dictionary.
+    #         prompt_type: The name type of prompt. (query or passage)
+    #         **kwargs: Additional arguments to pass to the encoder.
+
+    #         The order of priorities for prompt selection are:
+    #             1. Composed prompt of task name + prompt type (query or passage)
+    #             2. Specific task prompt
+    #             3. Composed prompt of task type + prompt type (query or passage)
+    #             4. Specific task type prompt
+    #             5. Specific prompt type (query or passage)
+
+
+    #     Returns:
+    #         The encoded sentences.
+    #     """
+    #     prompt = None
+    #     prompt_name = None
+    #     if self.model_prompts is not None:
+    #         prompt_name = self.get_prompt_name(
+    #             self.model_prompts, task_name, prompt_type
+    #         )
+    #         prompt = self.model_prompts.get(prompt_name, None)
+    #     if prompt_name:
+    #         logger.info(
+    #             f"Using {prompt_name=} for task={task_name} {prompt_type=} with {prompt=}"
+    #         )
+    #     else:
+    #         logger.info(f"No model prompts found for task={task_name} {prompt_type=}")
+    #     logger.info(f"Encoding {len(sentences)} sentences.")
+
+    #     kwargs.update(convert_to_tensor=True)
+
+    #     mp_pool = getattr(self, 'mp_pool', None)
+    #     if mp_pool is None:
+    #         with torch.autocast(
+    #             device_type=self.device.type, dtype=AMP_DTYPE
+    #         ) if AMP_DTYPE is not None else nullcontext():
+    #             embeddings = self.model.encode(sentences, prompt=prompt, **kwargs).cpu().float()
+    #     else:
+    #         # kwargs.pop('output_value', 0)
+    #         # kwargs.pop('device', 0)
+    #         embeddings = _encode_multi_process(mp_pool, sentences, **kwargs).float()
+
+    #     if isinstance(embeddings, torch.Tensor):
+    #         # sometimes in kwargs can be return_tensors=True
+    #         embeddings = embeddings.cpu().detach().float().numpy()
+    #     return embeddings
 
     def _predict(
         self,

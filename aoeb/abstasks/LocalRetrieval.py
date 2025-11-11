@@ -3,16 +3,19 @@ import os
 import csv
 import numpy as np
 from typing import List
-from mteb.abstasks.TaskMetadata import TaskMetadata
-from mteb.abstasks.AbsTaskRetrieval import HFDataLoader, AbsTaskRetrieval
-from mteb.abstasks.MultilingualTask import MultilingualTask
+# from mteb.abstasks.TaskMetadata import TaskMetadata
+from mteb.abstasks.task_metadata import TaskMetadata
+# from mteb.abstasks.AbsTaskRetrieval import HFDataLoader, AbsTaskRetrieval
+from mteb.abstasks.retrieval import AbsTaskRetrieval
+# from mteb.abstasks.MultilingualTask import MultilingualTask
 
 from datasets import load_dataset
 
 PREFIX = os.environ.get("LOCAL_DATA_PREFIX", "local-data")
 
 
-class LocalRetrieval(AbsTaskRetrieval, MultilingualTask):
+# class LocalRetrieval(AbsTaskRetrieval, MultilingualTask):
+class LocalRetrieval(AbsTaskRetrieval):
     """
     Retrieval task for local ToolRet dataset with multiple subsets (web, code, customized).
     """
@@ -24,7 +27,7 @@ class LocalRetrieval(AbsTaskRetrieval, MultilingualTask):
         ),
         reference="https://example.com/toolret",
         type="Retrieval",
-        category="s2p",  # sentence-to-passage retrieval
+        category="t2t",  # sentence-to-passage retrieval
         modalities=["text"],
         eval_splits=["test"],
         eval_langs={
@@ -83,9 +86,15 @@ year={2024}
             for split in eval_splits:
                 data_folder = os.path.join(PREFIX, self.metadata.dataset["path"], hf_subset)
 
-                queries_path = os.path.join(data_folder, self.metadata.dataset["query_file_name"])
-                corpus_path = os.path.join(data_folder, self.metadata.dataset["corpus_file_name"])
-                qrels_path = os.path.join(data_folder, self.metadata.dataset["qrels_dir"], self.metadata.dataset["qrels_file_name"])
+                # queries_path = os.path.join(data_folder, self.metadata.dataset["query_file_name"])
+                # corpus_path = os.path.join(data_folder, self.metadata.dataset["corpus_file_name"])
+                # qrels_path = os.path.join(data_folder, self.metadata.dataset["qrels_dir"], self.metadata.dataset["qrels_file_name"])
+
+                # print("="*20)
+                # print(self.query_file_name)
+                queries_path = os.path.join(data_folder, self.query_file_name)
+                corpus_path = os.path.join(data_folder, self.corpus_file_name)
+                qrels_path = os.path.join(data_folder, self.qrels_dir, self.qrels_file_name)
 
                 # 直接用 datasets.load_dataset 读 jsonl
                 corpus_ds = load_dataset("json", data_files=corpus_path, split="train")
@@ -98,12 +107,21 @@ year={2024}
                 if "_id" in queries_ds.column_names:
                     queries_ds = queries_ds.remove_columns("_id")
 
-                queries = {q[self.metadata.dataset["query_id_field"]]: q[self.metadata.dataset["query_text_field"]] for q in queries_ds}
+                # queries = {q[self.metadata.dataset["query_id_field"]]: q[self.metadata.dataset["query_text_field"]] for q in queries_ds}
+                # # corpus = {d[self.metadata.dataset["corpus_id_field"]]: d.get(self.metadata.dataset["corpus_title_field"], "") + " " + d.get(self.metadata.dataset["corpus_text_field"], "") for d in corpus_ds}
+                # corpus = {
+                #     d[self.metadata.dataset["corpus_id_field"]]: 
+                #     (d.get(self.metadata.dataset["corpus_title_field"]) or "") + " " + 
+                #     (d.get(self.metadata.dataset["corpus_text_field"]) or "") 
+                #     for d in corpus_ds
+                # }
+
+                queries = {q[self.query_id_field]: q[self.query_text_field] for q in queries_ds}
                 # corpus = {d[self.metadata.dataset["corpus_id_field"]]: d.get(self.metadata.dataset["corpus_title_field"], "") + " " + d.get(self.metadata.dataset["corpus_text_field"], "") for d in corpus_ds}
                 corpus = {
-                    d[self.metadata.dataset["corpus_id_field"]]: 
-                    (d.get(self.metadata.dataset["corpus_title_field"]) or "") + " " + 
-                    (d.get(self.metadata.dataset["corpus_text_field"]) or "") 
+                    d[self.corpus_id_field]: 
+                    (d.get(self.corpus_title_field) or "") + " " + 
+                    (d.get(self.corpus_text_field) or "") 
                     for d in corpus_ds
                 }
                 qrels_ds = self.load_qrels_from_tsv(qrels_path)

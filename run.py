@@ -12,12 +12,20 @@ os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 # os.environ["LOCAL_DATA_PREFIX"] = os.environ.get("LOCAL_DATA_PREFIX", "/data/workspace/aoeb/local-data")
 
 import torch
-from transformers import HfArgumentParser
+from transformers import HfArgumentParser, AutoModel
 # from transformers.utils.versions import require_version
 import mteb
-from mteb.models import model_meta_from_sentence_transformers
-
+# from mteb.models import model_meta_from_sentence_transformers
+# mteb2
+from mteb.models.model_meta import ModelMeta
+from mteb.models.get_model_meta import _model_meta_from_sentence_transformers
+from mteb.cache import ResultCache
 from aoeb.st_wrapper import STWrapper
+from mteb.models.model_implementations.jina_models import JinaV4Wrapper
+from mteb.models.model_implementations.vista_models import vista_loader
+from mteb.models.model_implementations.gme_v_models import GmeQwen2VL
+from mteb.models.model_implementations.vlm2vec_models import VLM2VecWrapper
+from mteb.models.sentence_transformer_wrapper import SentenceTransformerMultimodalEncoderWrapper
 
 
 logging.basicConfig(
@@ -66,6 +74,8 @@ class EvalArguments:
     batch_size: int = field(default=32, metadata={"help": "Will be set to `encode_kwargs`"})
     precision: str = field(default='fp16', metadata={"help": "amp_fp16,amp_bf16,fp16,bf16,fp32"})
 
+    is_multimodal: bool = field(default=False, metadata={"help": "If True, use multimodal model wrapper."})
+
     def __post_init__(self):
         if isinstance(self.tasks, str):
             self.tasks = [s for s in self.tasks.split(',') if s]
@@ -92,15 +102,12 @@ def run_eval(model, tasks: list, args: EvalArguments, **kwargs):
         _started = True
 
     for t in tasks:
-        evaluation = mteb.MTEB(tasks=[t])
-        eval_splits = evaluation.tasks[0].metadata.eval_splits
-        if len(eval_splits) > 1:
-            eval_splits = ['test']
-        results = evaluation.run(
+        # mteb 2.1.0
+        results = mteb.evaluate(
             model,
-            output_folder=args.output_dir,
+            [t],
+            cache = ResultCache(cache_path="."), #会自动在cache_path下创建一个results目录
             encode_kwargs=encode_kwargs,
-            eval_splits=eval_splits,
             **kwargs
         )
 
@@ -126,6 +133,10 @@ def main():
 
     tasks = mteb.get_tasks(tasks=args.tasks)
     logger.warning(f"Selected {len(tasks)} tasks:\n" + '\n'.join(str(t) for t in tasks))
+    # for task in tasks:
+    #     if "TempReason" in task.metadata.name:
+    #         if task.metadata.dataset["config_name"] is None:
+    #             task.metadata.dataset["config_name"] = "queries"
     if args.only_load:
         for t in tasks:
             logger.warning(f"Loading {t}")
@@ -137,13 +148,126 @@ def main():
         args.model_kwargs.update({"torch_dtype": torch.float16})
     elif args.precision == 'bf16':
         args.model_kwargs.update({"torch_dtype": torch.bfloat16})
-    device = 'cuda' if torch.cuda.device_count() == 1 else 'cpu'
-    model = STWrapper(args.model_path, device=device, model_kwargs=args.model_kwargs)
-    model.model.max_seq_length = min(8192, model.model.max_seq_length)
+    # device = 'cuda' if torch.cuda.device_count() == 1 else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    if args.is_multimodal:
+        # jina-embeddings-v4
+        if 'jina' in args.model_path and 'v4' in args.model_path:
+            model = JinaV4Wrapper(args.model_path, device=device, model_kwargs=args.model_kwargs)
+            
+        # VISTA model
+        elif 'bge' in args.model_path:
+            if 'bge-base' in args.model_path:
+                model_weight = "/data8/xjx/pretrained_models/bge-visualized/Visualized_base_en_v1.5.pth"
+                image_tokens_num = 196
+            elif 'bge-m3' in args.model_path:
+                model_weight = "/data8/xjx/pretrained_models/bge-visualized/Visualized_m3.pth"
+                image_tokens_num = 256
+            
+            # 合并 loader_kwargs
+            loader_kwargs = {
+                "model_weight": model_weight,
+                "image_tokens_num": image_tokens_num,
+            }
+            loader_kwargs.update(args.model_kwargs)
+            
+            model = vista_loader(args.model_path, **loader_kwargs)
+        
+        elif 'mme5' in args.model_path.lower():
+            model = SentenceTransformerMultimodalEncoderWrapper(
+                model=args.model_path,
+                model_kwargs=args.model_kwargs
+            )
+        elif 'gme' in args.model_path.lower():
+            # model = AutoModel.from_pretrained(args.model_path, **args.model_kwargs)
+            model = GmeQwen2VL(
+                model_name=args.model_path,
+                revision="latest",
+                device=device,
+                **args.model_kwargs
+            )
+        elif 'vlm2vec' in args.model_path.lower():
+            model = VLM2VecWrapper(
+                model_name=args.model_path,
+                device=device,
+                **args.model_kwargs
+            )
+        elif 'mm-embed' in args.model_path.lower():
+            args.model_kwargs["device_map"] = "auto"
+            model = AutoModel.from_pretrained(args.model_path, **args.model_kwargs)
+            # model = AutoModel.from_pretrained(args.model_path, **args.model_kwargs).to(device)
+            
+        # 模型元数据
+        meta_data = {
+            "name": f"multimodal/{args.model_path.split('/')[-1]}",
+            "loader": lambda: None,
+            "revision": "latest",
+            "languages": ["eng-Latn"],
+            "modalities": ["text", "image"],
+            # 添加所有其他必需字段的默认值
+            "release_date": "2024-01-01",
+            "n_parameters": 11000000000,
+            "memory_usage_mb": 20000,
+            "max_tokens": 2048,
+            "embed_dim": 1024,
+            "license": "apache-2.0",  # 必须是预定义的许可证之一
+            "open_weights": True,
+            "public_training_code": "https://example.com",  # 应该是URL字符串
+            "public_training_data": False,
+            "framework": ["PyTorch"],  # 应该是列表
+            "similarity_fn_name": "cosine",
+            "use_instructions": True,
+            "training_datasets": set()  # 应该是字典
+        }
+        if 'jina' in args.model_path and 'v4' in args.model_path:
+            from mteb.models.model_implementations.jina_models import jina_embeddings_v4
+            model.mteb_model_meta = jina_embeddings_v4
+        elif 'mme5' in args.model_path.lower():
+            from mteb.models.model_implementations.mme5_models import mme5_mllama
+            model.mteb_model_meta = mme5_mllama
+        else:   
+            model.mteb_model_meta = ModelMeta(
+                    **meta_data
+                )
+
+
+    else:
+        device = 'cuda' if torch.cuda.device_count() == 1 else 'cpu'
+        if "gme" in args.model_path or "mme5" in args.model_path.lower():
+            args.model_kwargs.pop("torch_dtype", None)
+            model = STWrapper(args.model_path, device=device, model_kwargs=args.model_kwargs)
+        elif "gte-multilingual" in args.model_path.lower() or "nomic-embed-text" in args.model_path.lower():
+            model = STWrapper(args.model_path, device=device, model_kwargs=args.model_kwargs, trust_remote_code=True)
+        elif "jina" in args.model_path.lower():
+            # args.model_kwargs.pop("torch_dtype", None)
+            # model = STWrapper(args.model_path, device=device, **args.model_kwargs)
+            model = JinaV4Wrapper(args.model_path, device=device, model_kwargs=args.model_kwargs)
+        elif "nv-embed" in args.model_path.lower():
+            args.model_kwargs.pop("return_dict", None)
+            model = STWrapper(args.model_path, device=device, model_kwargs=args.model_kwargs, trust_remote_code=True)
+        else:
+            model = STWrapper(args.model_path, device=device, model_kwargs=args.model_kwargs)
+        
+        if "jina" in args.model_path.lower():
+            from mteb.models.model_implementations.jina_models import jina_embeddings_v4
+            model.mteb_model_meta = jina_embeddings_v4
+            # 修改一下模态信息
+            model.mteb_model_meta.modalities = ["text"]
+        elif "mme5" in args.model_path.lower():
+            model.model.max_seq_length = min(2048, model.model.max_seq_length) if model.model.max_seq_length is not None else 2048
+            print(model.model.max_seq_length)
+            model.mteb_model_meta = _model_meta_from_sentence_transformers(model.model)
+    
+        else:
+            model.model.max_seq_length = min(8192, model.model.max_seq_length) if model.model.max_seq_length is not None else 8192
+            model.mteb_model_meta = _model_meta_from_sentence_transformers(model.model)
+    
+    if model.mteb_model_meta.name is None:
+        print("model name is None")
+        model.mteb_model_meta.name = f"local/{os.path.basename(args.model_path)}"
     if args.only_load:
         return
-    model.mteb_model_meta = model_meta_from_sentence_transformers(model.model)
-    model.mteb_model_meta.name = os.path.basename(args.model_path)
 
     args.encode_kwargs.update(batch_size=args.batch_size)
     run_eval(model, tasks, args, **args.run_kwargs)
