@@ -1,0 +1,26 @@
+{
+    "name": "FreshStackDoc-Angular",
+    "data": {
+        "query": {
+            "path": "json",
+            "modal": "TEXT",
+            "load_kwargs": {
+                "data_files": "/data8/xjx/datasets/freshstack/angular/queries.jsonl"
+            },
+            "xjx_style": true
+        },
+        "collection": {
+            "path": "json",
+            "modal": "TEXT",
+            "load_kwargs": {
+                "data_files": "/data8/xjx/datasets/freshstack/angular/corpus.jsonl"
+            },
+            "xjx_style": true
+        },
+        "label": {
+            "path": "/data8/xjx/datasets/freshstack/angular/qrels.tsv",
+            "modal": "LABEL",
+            "xjx_style": true
+        }
+    }
+}

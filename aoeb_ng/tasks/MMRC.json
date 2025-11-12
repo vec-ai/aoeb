@@ -1,0 +1,27 @@
+{
+    "name": "MMRC-test",
+    "data": {
+        "query": {
+            "path": "json",
+            "modal": "MIXED",
+            "load_kwargs": {
+                "data_files": "/data8/zmj/MMRC/query.jsonl"
+            }
+        },
+        "collection": {
+            "path": "json",
+            "modal": "MIXED",
+            "load_kwargs": {
+                "data_files": "/data8/zmj/MMRC/corpus.jsonl"
+            }
+        },
+        "label": {
+            "path": "/data8/zmj/MMRC/qrels.tsv",
+            "modal": "LABEL",
+            "xjx_style": true
+        },
+        "packages": {
+            "images.tar": {"path": "/data8/zmj/MMRC/images.tar"}
+        }
+    }
+}
